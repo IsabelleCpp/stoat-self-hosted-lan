@@ -23,8 +23,11 @@
 - [Certificate distribution and import](#certificate-distribution-and-import)
   - [Copy certificate from server via SSH or SCP](#copy-certificate-from-server-via-ssh-or-scp)
   - [Import certificate on Windows](#import-certificate-on-windows)
+    - [Delete imported certificate on Windows](#delete-imported-certificate-on-windows)
   - [Import certificate on Linux](#import-certificate-on-linux)
+    - [Delete imported certificate on Linux](#delete-imported-certificate-on-linux)
   - [Import certificate on macOS](#import-certificate-on-macos)
+    - [Delete imported certificate on macOS](#delete-imported-certificate-on-macos)
 - [Add hostname to hosts file](#add-hostname-to-hosts-file)
   - [Windows hosts file edit PowerShell](#windows-hosts-file-edit-powershell)
   - [Linux and macOS hosts file edit](#linux-and-macos-hosts-file-edit)
@@ -226,7 +229,7 @@ Arguments:
 
 After the server generates **`/etc/ssl/stoat/stoat.local.crt`** you must copy and import it on client machines so browsers trust the site.
 
-#### Copy certificate from server via SSH or SCP
+### Copy certificate from server via SSH or SCP
 
 **From your workstation (Linux/macOS):**
 ```bash
