@@ -3,6 +3,21 @@
 ## Table of Contents
 - [Overview](#overview)
 - [Prerequisites](#prerequisites)
+- [SSH Access to the VM](#ssh-access-to-the-vm)
+  - [Install and enable SSH server on the VM](#install-and-enable-ssh-server-on-the-vm)
+  - [Create or use an SSH key (client)](#create-or-use-an-ssh-key-client)
+  - [Connect from Linux or macOS](#connect-from-linux-or-macos)
+  - [Connect from Windows (PowerShell / OpenSSH)](#connect-from-windows-powershell--openssh)
+  - [Connect from Windows (PuTTY)](#connect-from-windows-putty)
+  - [Verify and troubleshoot](#verify-and-troubleshoot)
+- [Configure a Static Local IP on Ubuntu](#configure-a-static-local-ip-on-ubuntu)
+  - [Option A — Netplan (recommended for Ubuntu server)](#option-a--netplan-recommended-for-ubuntu-server)
+  - [Option B — NetworkManager (desktop or systems using NM)](#option-b--networkmanager-desktop-or-systems-using-nm)
+  - [Option C — Legacy /etc/network/interfaces (older systems)](#option-c--legacy-etcnetworkinterfaces-older-systems)
+  - [Option D — Router DHCP reservation (recommended alternative)](#option-d--router-dhcp-reservation-recommended-alternative)
+- [Verify Static IP and SSH Reachability](#verify-static-ip-and-ssh-reachability)
+  - [Quick checklist before you finish](#quick-checklist-before-you-finish)
+  - [Example variables to replace in the examples](#example-variables-to-replace-in-the-examples)
 - [Quick install script](#quick-install-script)
 - [What the script does](#what-the-script-does)
 - [Certificate distribution and import](#certificate-distribution-and-import)
@@ -34,6 +49,154 @@ This README explains how to install Stoat on a single Ubuntu VM for LAN use with
 - You will run the installer script with `sudo`.
 
 ---
+
+## SSH Access to the VM
+
+### Install and enable SSH server on the VM
+```bash
+# Install OpenSSH server
+sudo apt update
+sudo apt install -y openssh-server
+
+# Ensure SSH is enabled and running
+sudo systemctl enable --now ssh
+
+# Allow SSH through UFW firewall
+sudo ufw allow ssh
+sudo ufw reload
+
+# Verify SSH is listening
+ss -ltnp | grep ssh
+```
+
+### Create or use an SSH key (client)
+```bash
+ssh-keygen -t ed25519 -C "your_email@example.com"
+
+# Copy public key to the VM (replace user@vm)
+ssh-copy-id user@VM_IP
+# fallback if ssh-copy-id not available
+cat ~/.ssh/id_ed25519.pub | ssh user@VM_IP 'mkdir -p ~/.ssh && cat >> ~/.ssh/authorized_keys && chmod 700 ~/.ssh && chmod 600 ~/.ssh/authorized_keys'
+```
+
+### Connect from Linux or macOS
+```bash
+ssh user@VM_IP
+# if you used a nonstandard key or port:
+ssh -i ~/.ssh/id_ed25519 -p 2222 user@VM_IP
+```
+
+### Connect from Windows (PowerShell / OpenSSH)
+```powershell
+# From PowerShell (Windows 10+ with OpenSSH)
+ssh user@VM_IP
+```
+
+### Connect from Windows (PuTTY)
+- Open PuTTY, set **Host Name** to `user@VM_IP`, set **Port** if nonstandard, load your private key via **Connection → SSH → Auth → Private key file for authentication**, then **Open**.
+
+### Verify and troubleshoot
+```bash
+# From the VM: show authorized keys and SSH status
+sudo cat /var/log/auth.log | tail -n 50
+sudo systemctl status ssh
+
+# From client: verbose SSH output
+ssh -vvv user@VM_IP
+```
+
+---
+
+## Configure a Static Local IP on Ubuntu
+
+> Use the method that matches your system: **Netplan** (Ubuntu 18.04+ server), **NetworkManager** (desktop), or legacy `/etc/network/interfaces`. Replace `eth0`, `VM_IP`, `GATEWAY`, and `NAMESERVERS` with your values.
+
+### Option A — Netplan (recommended for Ubuntu server)
+```yaml
+# Create or edit /etc/netplan/01-netcfg.yaml
+network:
+  version: 2
+  renderer: networkd
+  ethernets:
+    eth0:
+      dhcp4: no
+      addresses:
+        - 192.168.1.x/24
+      gateway4: 192.168.1.1
+      nameservers:
+        addresses: [192.168.1.1, 1.1.1.1]
+```
+```bash
+# Apply the config
+sudo netplan try
+# If OK, make it permanent
+sudo netplan apply
+
+# Verify
+ip -4 addr show eth0
+ip route show
+```
+
+### Option B — NetworkManager (desktop or systems using NM)
+```bash
+# Set static IP with nmcli
+nmcli connection modify "Wired connection 1" ipv4.addresses 192.168.1.x/24
+nmcli connection modify "Wired connection 1" ipv4.gateway 192.168.1.1
+nmcli connection modify "Wired connection 1" ipv4.dns "192.168.1.1 1.1.1.1"
+nmcli connection modify "Wired connection 1" ipv4.method manual
+nmcli connection up "Wired connection 1"
+```
+
+### Option C — Legacy /etc/network/interfaces (older systems)
+```bash
+# Edit /etc/network/interfaces
+auto eth0
+iface eth0 inet static
+  address 192.168.1.x
+  netmask 255.255.255.0
+  gateway 192.168.1.1
+  dns-nameservers 192.168.1.1 1.1.1.1
+
+# Restart networking
+sudo systemctl restart networking
+# or
+sudo ifdown eth0 && sudo ifup eth0
+```
+
+### Option D — Router DHCP reservation (recommended alternative)
+- Log into your router's admin UI and create a DHCP reservation for the VM's MAC address. This keeps the VM on DHCP while ensuring a stable IP without changing OS network config.
+
+---
+
+## Verify Static IP and SSH Reachability
+
+```bash
+# From the VM
+ip addr show eth0
+ip route show
+systemctl status ssh
+
+# From another machine on the LAN
+ping -c 3 192.168.1.x
+ssh user@192.168.1.x
+```
+
+---
+
+### Quick checklist before you finish
+- **Confirm interface name** (`ip link`) and use it instead of `eth0` if different.  
+- **Backup** existing network config files before editing.  
+- **If remote**: schedule a fallback (console access or temporary DHCP) in case the static config prevents SSH access.  
+- **Update /etc/hosts** on clients or local DNS so `stoat.local` resolves to the static IP.  
+
+---
+
+### Example variables to replace in the examples
+- `eth0` → your network interface name  
+- `192.168.1.x` → desired static IP (`VM_IP`)  
+- `192.168.1.1` → gateway/router IP (`GATEWAY`)  
+- `1.1.1.1` → alternate DNS resolver
+
 
 ## Quick install script
 
