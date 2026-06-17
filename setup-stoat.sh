@@ -177,16 +177,17 @@ CERT_B64_DER=$(openssl x509 -in "$CERT_CRT" -outform der | base64 -w0)
 echo
 echo "=== Windows PowerShell one-line import command for LocalMachine Root ==="
 echo "Paste the following line into an elevated PowerShell window (run as Administrator)."
-echo "It will show which certificates would be deleted, ask for confirmation, then delete and import the new certificate."
+echo "It will list matching certificates, ask for confirmation, delete only on explicit Y, then import the new certificate using a proper temp file."
 echo
 
-printf '%s\n\n' "\$hostName='${HOSTNAME}'; \$b='${CERT_B64_DER}'; \$matches=Get-ChildItem Cert:\LocalMachine\Root | Where-Object { \$_.Subject -like \"*\$hostName*\" -or \$_.Subject -like \"*CN=\$hostName*\" }; if (\$matches -and \$matches.Count -gt 0) { \$matches | Format-Table Subject,Thumbprint; \$ans=Read-Host 'Delete the above certificates? Type Y to confirm'; if (\$ans -match '^[Yy]$') { \$matches | ForEach-Object { Remove-Item -Path \$_.PSPath -Force -ErrorAction Stop }; Write-Host 'Deleted matching certificates.' } else { Write-Host 'Deletion aborted by user.' } } else { Write-Host 'No matching certificates found in LocalMachine\\Root.' }; \$tmp=Join-Path \$env:TEMP (\"\$hostName.crt\"); [IO.File]::WriteAllBytes(\$tmp,[Convert]::FromBase64String(\$b)); Import-Certificate -FilePath \$tmp -CertStoreLocation Cert:\LocalMachine\Root; Remove-Item -Path \$tmp -Force; Write-Host \"Imported certificate and removed \$tmp.\""
+printf '%s\n\n' "\$hostName='${HOSTNAME}'; \$b='${CERT_B64_DER}'; \$matches=Get-ChildItem Cert:\LocalMachine\Root | Where-Object { \$_.Subject -like \"*\$hostName*\" -or \$_.Subject -like \"*CN=\$hostName*\" }; if (\$matches -and \$matches.Count -gt 0) { \$matches | Format-Table Subject,Thumbprint; \$ans=Read-Host 'Delete the above certificates? Type Y to confirm'; if (\$ans -match '^[Yy]$') { \$matches | ForEach-Object { if (\$_.Thumbprint) { Remove-Item -Path (\"Cert:\\LocalMachine\\Root\\\" + \$_.Thumbprint) -Force -ErrorAction Stop } else { Write-Warning \"Skipping item without Thumbprint: \$($_.Subject)\" } }; Write-Host 'Deleted matching certificates.' } else { Write-Host 'Deletion aborted by user.' } } else { Write-Host 'No matching certificates found in LocalMachine\\Root.' }; \$tmp=Join-Path \$env:TEMP (\"\$hostName.crt\"); [IO.File]::WriteAllBytes(\$tmp,[Convert]::FromBase64String(\$b)); Import-Certificate -FilePath \$tmp -CertStoreLocation Cert:\LocalMachine\Root; Remove-Item -LiteralPath \$tmp -Force -ErrorAction SilentlyContinue; Write-Host \"Imported certificate and removed \$tmp.\""
 
 
 echo "=== Quick notes ==="
 echo "• Run the one-line PowerShell commands as Administrator to modify LocalMachine stores."
 echo "• The PowerShell one-liner lists matching certificates and requires you to type 'Y' to proceed with deletion."
-echo "• The certificate is written to a proper temp file in the Windows temp directory and removed after import."
+echo "• Deletion uses the certificate Thumbprint to build the provider path (Cert:\\LocalMachine\\Root\\<thumbprint>) to avoid filesystem misinterpretation."
+echo "• The certificate is written to a proper temp file in the Windows temp directory and removed after import using Remove-Item -LiteralPath."
 echo "• To inspect matches first without deleting, run in an elevated PowerShell:"
 echo "  Get-ChildItem Cert:\\LocalMachine\\Root | Where-Object { \$_.Subject -like '*${HOSTNAME}*' -or \$_.Subject -like '*CN=${HOSTNAME}*' } | Format-List Subject,Thumbprint"
 echo
