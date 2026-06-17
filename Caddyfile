@@ -1,5 +1,5 @@
-${STOAT_DOMAIN} {
-    tls ${STOAT_CERT_CRT} ${STOAT_CERT_KEY}
+{env.STOAT_DOMAIN} {
+    tls {env.STOAT_CERT_CRT} {env.STOAT_CERT_KEY}
 
     route /api* {
         uri strip_prefix /api
