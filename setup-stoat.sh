@@ -112,7 +112,7 @@ sudo chmod 755 "$CERT_DIR"
 CERT_KEY="${CERT_DIR}/${HOSTNAME}.key"
 CERT_CRT="${CERT_DIR}/${HOSTNAME}.crt"
 
-# Decide whether to generate certificate
+# Generate certificate with SAN
 generate_cert() {
   echo "Generating self-signed certificate with SAN for $HOSTNAME and $VM_IP..."
   cat > "$SAN_CONF" <<EOF
@@ -167,6 +167,48 @@ echo "Running generate_config.sh --overwrite $HOSTNAME ..."
 echo "Pulling images and starting Stoat stack..."
 sudo docker compose pull || true
 sudo docker compose up -d
+
+# Produce Base64 strings for Windows import and print quick commands
+echo "Preparing Windows import commands..."
+
+# DER encoded Base64 (recommended for Windows)
+CERT_B64_DER=$(openssl x509 -in "$CERT_CRT" -outform der | base64 -w0)
+
+# PEM body Base64 (alternative)
+CERT_B64_PEM=$(awk 'BEGIN{ORS="";} /-----BEGIN CERTIFICATE-----/{p=1;next} /-----END CERTIFICATE-----/{p=0} p{print}' "$CERT_CRT" | base64 -w0)
+
+echo
+echo "=== Windows PowerShell one-line import command for LocalMachine Root ==="
+echo "Paste the following line into an elevated PowerShell window (run as Administrator)."
+echo "It will show which certificates would be deleted, ask for confirmation, then delete and import the new certificate."
+echo
+
+printf '%s\n\n' "\$hostName='${HOSTNAME}'; \$matches = Get-ChildItem Cert:\LocalMachine\Root | Where-Object { \$_.Subject -like \"*\$hostName*\" -or \$_.Subject -like \"*CN=\$hostName*\" }; if (\$matches) { \$matches | Format-Table Subject,Thumbprint; \$ans = Read-Host 'Delete the above certificates? Type Y to confirm'; if (\$ans -match '^[Yy]$') { \$matches | Remove-Item -Force } else { Write-Host 'Deletion aborted by user'; } } else { Write-Host 'No matching certificates found in LocalMachine\\Root'; }; \$b='${CERT_B64_DER}'; \$tmp=[IO.Path]::Combine(\$env:TEMP, \"\$hostName.crt\"); [IO.File]::WriteAllBytes(\$tmp,[Convert]::FromBase64String(\$b)); Import-Certificate -FilePath \$tmp -CertStoreLocation Cert:\LocalMachine\Root; Remove-Item \$tmp -Force"
+
+echo
+echo "=== Alternative PFX import one-line (if you create a PFX on Linux) ==="
+echo "This variant also shows matches and asks for confirmation before deleting them. Replace BASE64_PFX and PFXPASSWORD."
+printf '%s\n\n' "\$hostName='${HOSTNAME}'; \$matches = Get-ChildItem Cert:\LocalMachine\My | Where-Object { \$_.Subject -like \"*\$hostName*\" -or \$_.Subject -like \"*CN=\$hostName*\" }; if (\$matches) { \$matches | Format-Table Subject,Thumbprint; \$ans = Read-Host 'Delete the above certificates? Type Y to confirm'; if (\$ans -match '^[Yy]$') { \$matches | Remove-Item -Force } else { Write-Host 'Deletion aborted by user'; } } else { Write-Host 'No matching certificates found in LocalMachine\\My'; }; \$b='BASE64_PFX'; \$pw='PFXPASSWORD'; \$tmp=[IO.Path]::Combine(\$env:TEMP, \"\$hostName.pfx\"); [IO.File]::WriteAllBytes(\$tmp,[Convert]::FromBase64String(\$b)); Import-PfxCertificate -FilePath \$tmp -CertStoreLocation Cert:\LocalMachine\My -Password (ConvertTo-SecureString \$pw -AsPlainText -Force); Remove-Item \$tmp -Force"
+
+echo
+echo "=== Base64 strings produced on this machine ==="
+echo "DER encoded Base64 (recommended for Windows import):"
+echo
+echo "${CERT_B64_DER}"
+echo
+echo "PEM body Base64 (alternative):"
+echo
+echo "${CERT_B64_PEM}"
+echo
+
+echo "=== Quick notes ==="
+echo "• Run the one-line PowerShell commands as Administrator to modify LocalMachine stores."
+echo "• The PowerShell one-liner lists matching certificates and requires you to type 'Y' to proceed with deletion."
+echo "• The certificate is written to a proper temp file in the Windows temp directory and removed after import."
+echo "• If you prefer to inspect matches first without deleting, run in an elevated PowerShell:"
+echo "  Get-ChildItem Cert:\\LocalMachine\\Root | Where-Object { \$_.Subject -like '*${HOSTNAME}*' -or \$_.Subject -like '*CN=${HOSTNAME}*' } | Format-List Subject,Thumbprint"
+echo "• To import a PFX (certificate + private key), create a PFX on the Linux side and base64 it; then use the PFX one-liner above with a secure password."
+echo
 
 echo "=== Done ==="
 echo "Visit: https://${HOSTNAME} (accept or import the self-signed certificate)"
