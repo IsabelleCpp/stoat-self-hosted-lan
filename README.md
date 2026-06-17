@@ -202,7 +202,7 @@ ssh user@192.168.1.x
 
 ```bash
 sudo chmod +x setup-stoat.sh
-sudo ./setup-stoat.sh /opt/stoat stoat.local eth0
+sudo ./setup-stoat.sh stoat.local eth0
 ```
 
 Arguments:
@@ -364,7 +364,6 @@ Open a browser to `https://stoat.local`, accept or import the self‑signed cert
 
 ```bash
 # Stop and remove Stoat compose services
-cd /opt/stoat
 sudo docker compose down
 
 # Remove all containers (destructive)
