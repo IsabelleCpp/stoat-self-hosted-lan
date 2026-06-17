@@ -1,17 +1,61 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-HOSTNAME="${1:-stoat.local}"
-INTERFACE="${2:-eth0}"
+# Defaults
+HOSTNAME="stoat.local"
+INTERFACE="eth0"
 CERT_DIR="/etc/ssl/stoat"
 SAN_CONF="$HOME/san.cnf"
 COMPOSE_FILE="./compose.yml"
 CADDYFILE="./Caddyfile"
 GEN_SCRIPT="./generate_config.sh"
+REGEN_CERT=0
+
+usage() {
+  cat <<EOF
+Usage: $0 [HOSTNAME] [INTERFACE] [--regen-cert|-r] [--help]
+
+Options:
+  --regen-cert, -r   Force regeneration of the self-signed certificate
+  --help             Show this help message
+EOF
+}
+
+# Parse args (positional + flags)
+POSITIONAL=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --regen-cert|-r)
+      REGEN_CERT=1
+      shift
+      ;;
+    --help|-h)
+      usage
+      exit 0
+      ;;
+    *)
+      POSITIONAL+=("$1")
+      shift
+      ;;
+  esac
+done
+
+# Apply positional args if provided
+if [ ${#POSITIONAL[@]} -ge 1 ]; then
+  HOSTNAME="${POSITIONAL[0]}"
+fi
+if [ ${#POSITIONAL[@]} -ge 2 ]; then
+  INTERFACE="${POSITIONAL[1]}"
+fi
 
 echo "=== Stoat installer ==="
 echo "Hostname: $HOSTNAME"
 echo "Network interface: $INTERFACE"
+if [ "$REGEN_CERT" -eq 1 ]; then
+  echo "Certificate regeneration: enabled"
+else
+  echo "Certificate regeneration: disabled (will skip if cert exists)"
+fi
 
 # Detect IPv4 on interface, fallback to first non-loopback address
 VM_IP=$(ip -4 addr show "$INTERFACE" 2>/dev/null | awk '/inet /{print $2}' | cut -d/ -f1 || true)
@@ -60,9 +104,18 @@ else
   echo "Docker already installed"
 fi
 
-# Create SAN config and self-signed certs
-echo "Generating self-signed certificate with SAN for $HOSTNAME and $VM_IP..."
-cat > "$SAN_CONF" <<EOF
+# Create CERT_DIR if needed
+sudo mkdir -p "$CERT_DIR"
+sudo chown root:root "$CERT_DIR"
+sudo chmod 755 "$CERT_DIR"
+
+CERT_KEY="${CERT_DIR}/${HOSTNAME}.key"
+CERT_CRT="${CERT_DIR}/${HOSTNAME}.crt"
+
+# Decide whether to generate certificate
+generate_cert() {
+  echo "Generating self-signed certificate with SAN for $HOSTNAME and $VM_IP..."
+  cat > "$SAN_CONF" <<EOF
 [req]
 distinguished_name = dn
 x509_extensions = v3_req
@@ -76,15 +129,27 @@ DNS.1 = ${HOSTNAME}
 IP.1 = ${VM_IP}
 EOF
 
-sudo mkdir -p "$CERT_DIR"
-sudo openssl req -x509 -nodes -newkey rsa:4096 \
-  -keyout "${CERT_DIR}/${HOSTNAME}.key" \
-  -out "${CERT_DIR}/${HOSTNAME}.crt" \
-  -days 3650 \
-  -config "$SAN_CONF"
+  sudo openssl req -x509 -nodes -newkey rsa:4096 \
+    -keyout "${CERT_KEY}" \
+    -out "${CERT_CRT}" \
+    -days 3650 \
+    -config "$SAN_CONF"
 
-sudo chmod 640 "${CERT_DIR}/${HOSTNAME}.key"
-sudo chown root:root "${CERT_DIR}/${HOSTNAME}."*
+  sudo chmod 640 "${CERT_KEY}"
+  sudo chown root:root "${CERT_KEY}" "${CERT_CRT}"
+  echo "Certificate generated at ${CERT_CRT}"
+}
+
+if [ "$REGEN_CERT" -eq 1 ]; then
+  echo "Forcing certificate regeneration..."
+  generate_cert
+else
+  if [ -f "$CERT_KEY" ] && [ -f "$CERT_CRT" ]; then
+    echo "Certificate and key already exist for ${HOSTNAME} in ${CERT_DIR}. Skipping generation."
+  else
+    generate_cert
+  fi
+fi
 
 # Ensure generate_config.sh is executable
 if [ -f "$GEN_SCRIPT" ]; then
