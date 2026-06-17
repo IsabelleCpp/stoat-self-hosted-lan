@@ -70,6 +70,7 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile
       - ./data/caddy-data:/data
       - ./data/caddy-config:/config
+      - ${STOAT_CERT_DIR:-/etc/ssl/stoat}:/etc/ssl/stoat
     networks:
       default:
         aliases:

@@ -95,6 +95,19 @@ echo "Configuring Stoat with hostname $DOMAIN"
 
 STOAT_HOSTNAME="https://$DOMAIN"
 
+STOAT_DOMAIN="${DOMAIN}"
+
+if [ -z "${VM_IP:-}" ]; then
+  VM_IP=$(ip -4 addr show eth0 2>/dev/null | awk '/inet /{print $2}' | cut -d/ -f1 || true)
+  if [ -z "$VM_IP" ]; then
+    VM_IP=$(hostname -I | awk '{print $1}')
+  fi
+fi
+
+STOAT_CERT_DIR="${STOAT_CERT_DIR:-/etc/ssl/stoat}"
+STOAT_CERT_CRT="${STOAT_CERT_CRT:-${STOAT_CERT_DIR}/${STOAT_DOMAIN}.crt}"
+STOAT_CERT_KEY="${STOAT_CERT_KEY:-${STOAT_CERT_DIR}/${STOAT_DOMAIN}.key}"
+
 read -rp "Would you like to place Stoat behind another reverse proxy? [y/N]: "
 if [ "$REPLY" = "y" ] || [ "$REPLY" = "Y" ]; then
     echo "Yes received. Configuring for reverse proxy."
@@ -185,6 +198,12 @@ echo "VITE_MEDIA_URL=https://$DOMAIN/autumn" >> .env.web
 echo "VITE_PROXY_URL=https://$DOMAIN/january" >> .env.web
 echo "VITE_CFG_ENABLE_VIDEO=$VIDEO_ENABLED" >> .env.web
 
+echo "STOAT_DOMAIN=$STOAT_DOMAIN" >> .env.web
+echo "VM_IP=$VM_IP" >> .env.web
+echo "STOAT_CERT_DIR=$STOAT_CERT_DIR" >> .env.web
+echo "STOAT_CERT_CRT=$STOAT_CERT_CRT" >> .env.web
+echo "STOAT_CERT_KEY=$STOAT_CERT_KEY" >> .env.web
+
 # hostnames
 echo "# All secrets are stored in secrets.env" > Revolt.toml
 echo "# Any configuration added to this file will be overwritten by generate_config on run; however," >> Revolt.toml
@@ -204,7 +223,8 @@ echo "worldwide = \"wss://$DOMAIN/livekit\"" >> Revolt.toml
 
 # livekit yml
 echo "rtc:" > livekit.yml
-echo "  use_external_ip: true" >> livekit.yml
+echo "  use_external_ip: false" >> livekit.yml
+echo "  node_ip: $VM_IP" >> livekit.yml
 echo "  port_range_start: 50000" >> livekit.yml
 echo "  port_range_end: 50100" >> livekit.yml
 echo "  tcp_port: 7881" >> livekit.yml
@@ -246,3 +266,5 @@ fi
 if [[ $IS_OVERWRITING -eq 1 ]]; then
     echo "Overwrote existing config. If any custom configuration was present in old Revolt.toml, you may now copy it over from Revolt.toml.old."
 fi
+
+echo "generate_config.sh completed: STOAT_DOMAIN=${STOAT_DOMAIN}, VM_IP=${VM_IP}, CERT=${STOAT_CERT_CRT}"
