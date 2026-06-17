@@ -224,9 +224,9 @@ Arguments:
 
 ## Certificate distribution and import
 
-After the server generates `/etc/ssl/stoat/stoat.local.crt` you must copy and import it on client machines so browsers trust the site.
+After the server generates **`/etc/ssl/stoat/stoat.local.crt`** you must copy and import it on client machines so browsers trust the site.
 
-### Copy certificate from server via SSH or SCP
+#### Copy certificate from server via SSH or SCP
 
 **From your workstation (Linux/macOS):**
 ```bash
@@ -249,7 +249,7 @@ scp user@server:/etc/ssl/stoat/stoat.local.crt .
 ### Import certificate on Windows
 
 **Method A GUI**
-1. Copy `stoat.local.crt` to the Windows machine.  
+1. Copy **`stoat.local.crt`** to the Windows machine.  
 2. Double‑click the `.crt` file → click **Install Certificate** → choose **Local Machine** → **Place all certificates in the following store** → **Browse** → select **Trusted Root Certification Authorities** → Finish.  
 3. Restart the browser.
 
@@ -267,6 +267,26 @@ Import-Certificate -FilePath $certPath -CertStoreLocation Cert:\LocalMachine\Roo
 certutil -addstore -f "Root" $certPath
 ```
 
+#### Delete imported certificate on Windows
+
+**Find the certificate (PowerShell, run as Administrator)**
+```powershell
+Get-ChildItem Cert:\LocalMachine\Root | Where-Object { $_.Subject -like "*stoat.local*" } | Format-List Thumbprint,Subject
+```
+**Remove by thumbprint (PowerShell)**
+```powershell
+$thumb = "<THUMBPRINT_FROM_PREVIOUS_COMMAND>"
+Remove-Item -Path "Cert:\LocalMachine\Root\$thumb" -Confirm:$false
+```
+**Or remove with certutil**
+```powershell
+certutil -delstore "Root" <THUMBPRINT>
+```
+**Or GUI**
+- Open **mmc.exe** → File → Add/Remove Snap-in → **Certificates** → **Computer account** → **Local computer** → OK.  
+- Browse **Trusted Root Certification Authorities** → **Certificates** → find **stoat.local** → right‑click → **Delete**.  
+- Restart the browser.
+
 ---
 
 ### Import certificate on Linux
@@ -279,13 +299,36 @@ sudo cp stoat.local.crt /usr/local/share/ca-certificates/stoat.local.crt
 sudo update-ca-certificates
 ```
 
+**RHEL/CentOS (alternatives)**
+```bash
+# copy to anchors and update trust
+sudo cp stoat.local.crt /etc/pki/ca-trust/source/anchors/stoat.local.crt
+sudo update-ca-trust extract
+```
+
+#### Delete imported certificate on Linux
+
+**Debian/Ubuntu**
+```bash
+# remove the file you added and update CA store
+sudo rm /usr/local/share/ca-certificates/stoat.local.crt
+sudo update-ca-certificates --fresh
+```
+**RHEL/CentOS**
+```bash
+sudo rm /etc/pki/ca-trust/source/anchors/stoat.local.crt
+sudo update-ca-trust extract
+```
+**Notes**
+- After removal, restart browsers and any services that cache the system CA store.
+
 ---
 
 ### Import certificate on macOS
 
 **Using Keychain Access**
-1. Copy `stoat.local.crt` to the Mac.  
-2. Open **Keychain Access** → select **System** keychain → File → Import Items → choose `stoat.local.crt`.  
+1. Copy **`stoat.local.crt`** to the Mac.  
+2. Open **Keychain Access** → select **System** keychain → File → Import Items → choose **`stoat.local.crt`**.  
 3. Find the imported cert → double‑click → **Trust** → **When using this certificate** → **Always Trust**.  
 4. Restart the browser.
 
@@ -294,11 +337,29 @@ sudo update-ca-certificates
 sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain /path/to/stoat.local.crt
 ```
 
+#### Delete imported certificate on macOS
+
+**GUI (Keychain Access)**
+- Open **Keychain Access** → select **System** keychain → search for **stoat.local** → right‑click the certificate → **Delete**.  
+- Restart the browser.
+
+**Command line**
+```bash
+# delete by common name
+sudo security delete-certificate -c "stoat.local" -k /Library/Keychains/System.keychain
+```
+**If you need to locate the certificate fingerprint first**
+```bash
+security find-certificate -a -c "stoat.local" -Z /Library/Keychains/System.keychain
+# then delete by SHA-1 hash
+sudo security delete-certificate -Z <SHA1_HASH> /Library/Keychains/System.keychain
+```
+
 ---
 
 ## Add hostname to hosts file
 
-Clients must resolve `stoat.local` to the VM IP. Add an entry to the hosts file on each client.
+Clients must resolve **`stoat.local`** to the VM IP. Add an entry to the hosts file on each client.
 
 ### Windows hosts file edit PowerShell
 
