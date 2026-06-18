@@ -36,6 +36,7 @@
 - [Reset and cleanup](#reset-and-cleanup)
 - [Notes](#notes)
 - [Hyper-V VM LAN Access Without Internet](#hyper-v-vm-lan-access-without-internet)
+- [Disable systemd-networkd-wait-online.service](#disable-systemd-networkd-wait-onlineservice)
 ---
 
 ## Overview
@@ -445,6 +446,8 @@ sudo docker compose down
 
 - If your primary network interface is not `eth0`, pass the correct interface name to the installer script or edit the script accordingly.
 
+---
+
 ## Hyper-V VM LAN Access Without Internet
 
 1. Create an External switch (Hyper‑V Manager → Virtual Switch Manager → External)
@@ -453,4 +456,13 @@ sudo docker compose down
 ```powershell
 Add-VMNetworkAdapterAcl -VMName "MyVM" -RemoteIPAddress 192.168.1.1 -Direction Both -Action Deny
 Get-VMNetworkAdapterAcl -VMName "MyVM"
+```
+
+---
+
+## Disable systemd-networkd-wait-online.service
+
+```bash
+sudo systemctl disable systemd-networkd-wait-online.service
+sudo systemctl mask systemd-networkd-wait-online.service 
 ```
